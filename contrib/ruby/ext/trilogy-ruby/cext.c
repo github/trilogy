@@ -813,7 +813,7 @@ static VALUE read_query_response(VALUE vargs)
 
         rb_encoding *conn_enc = rb_to_encoding(ctx->encoding);
 
-#ifdef HAVE_RB_INTERNED_STR
+#ifdef HAVE_RB_ENC_INTERNED_STR
         VALUE column_name = rb_enc_interned_str(column.name, column.name_len, conn_enc);
 #else
         VALUE column_name = rb_enc_str_new(column.name, column.name_len, conn_enc);
