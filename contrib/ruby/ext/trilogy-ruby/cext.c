@@ -32,6 +32,7 @@ struct trilogy_ctx {
     char server_version[TRILOGY_SERVER_VERSION_SIZE + 1];
     unsigned int query_flags;
     VALUE encoding;
+    rb_encoding *conn_encoding;
 };
 
 static void mark_trilogy(void *ptr)
@@ -456,6 +457,7 @@ static VALUE rb_trilogy_connect(VALUE self, VALUE encoding, VALUE charset, VALUE
 
     RB_OBJ_WRITE(self, &ctx->encoding, encoding);
     connopt.encoding = NUM2INT(charset);
+    ctx->conn_encoding = rb_to_encoding(ctx->encoding);
 
     Check_Type(opts, T_HASH);
 
@@ -791,8 +793,6 @@ static VALUE read_query_response(VALUE vargs)
     VALUE rb_column_info;
     struct column_info *column_info = ALLOCV_N(struct column_info, rb_column_info, column_count);
 
-    rb_encoding *conn_enc = rb_to_encoding(ctx->encoding);
-
     for (uint64_t i = 0; i < column_count; i++) {
         trilogy_column_t column;
 
@@ -814,9 +814,9 @@ static VALUE read_query_response(VALUE vargs)
         }
 
 #ifdef HAVE_RB_ENC_INTERNED_STR
-        VALUE column_name = rb_enc_interned_str(column.name, column.name_len, conn_enc);
+        VALUE column_name = rb_enc_interned_str(column.name, column.name_len, ctx->conn_encoding);
 #else
-        VALUE column_name = rb_enc_str_new(column.name, column.name_len, conn_enc);
+        VALUE column_name = rb_enc_str_new(column.name, column.name_len, ctx->conn_encoding);
         OBJ_FREEZE(column_name);
 #endif
 
@@ -924,7 +924,7 @@ static VALUE rb_trilogy_query(VALUE self, VALUE query)
     struct trilogy_ctx *ctx = get_open_ctx(self);
 
     StringValue(query);
-    query = rb_str_export_to_enc(query, rb_to_encoding(ctx->encoding));
+    query = rb_str_export_to_enc(query, ctx->conn_encoding);
 
     int rc = trilogy_query_send(&ctx->conn, RSTRING_PTR(query), RSTRING_LEN(query));
 
