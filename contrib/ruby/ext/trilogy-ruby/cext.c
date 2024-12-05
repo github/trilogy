@@ -791,6 +791,8 @@ static VALUE read_query_response(VALUE vargs)
     VALUE rb_column_info;
     struct column_info *column_info = ALLOCV_N(struct column_info, rb_column_info, column_count);
 
+    rb_encoding *conn_enc = rb_to_encoding(ctx->encoding);
+
     for (uint64_t i = 0; i < column_count; i++) {
         trilogy_column_t column;
 
@@ -810,8 +812,6 @@ static VALUE read_query_response(VALUE vargs)
                 return read_query_error(args, rc, "trilogy_read_column");
             }
         }
-
-        rb_encoding *conn_enc = rb_to_encoding(ctx->encoding);
 
 #ifdef HAVE_RB_ENC_INTERNED_STR
         VALUE column_name = rb_enc_interned_str(column.name, column.name_len, conn_enc);
