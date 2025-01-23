@@ -2,19 +2,21 @@ PATH
   remote: .
   specs:
     trilogy (2.8.1)
+      bigdecimal
 
 GEM
   remote: https://rubygems.org/
   specs:
-    benchmark-ips (2.7.2)
-    minitest (5.11.3)
+    benchmark-ips (2.14.0)
+    bigdecimal (3.1.9)
+    minitest (5.25.4)
     mysql2 (0.5.6)
-    rake (13.0.1)
-    rake-compiler (1.0.7)
+    rake (13.2.1)
+    rake-compiler (1.2.9)
       rake
 
 PLATFORMS
-  ruby
+  x86_64-linux
 
 DEPENDENCIES
   benchmark-ips

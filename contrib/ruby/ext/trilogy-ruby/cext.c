@@ -20,7 +20,7 @@ static VALUE Trilogy_BaseConnectionError, Trilogy_ProtocolError, Trilogy_SSLErro
     Trilogy_ConnectionClosedError,
     Trilogy_TimeoutError, Trilogy_SyscallError, Trilogy_Result, Trilogy_EOFError, Trilogy_AuthPluginError;
 
-static ID id_socket, id_host, id_port, id_username, id_password, id_found_rows, id_connect_timeout, id_read_timeout,
+static ID id_socket, id_raw_socket, id_host, id_port, id_username, id_password, id_found_rows, id_connect_timeout, id_read_timeout,
     id_write_timeout, id_keepalive_enabled, id_keepalive_idle, id_keepalive_interval, id_keepalive_count,
     id_ivar_affected_rows, id_ivar_fields, id_ivar_last_insert_id, id_ivar_rows, id_ivar_query_time, id_password,
     id_database, id_enable_cleartext_plugin, id_ssl_ca, id_ssl_capath, id_ssl_cert, id_ssl_cipher, id_ssl_crl, id_ssl_crlpath, id_ssl_key,
@@ -295,42 +295,24 @@ static int _cb_ruby_wait(trilogy_sock_t *sock, trilogy_wait_t wait)
     return TRILOGY_OK;
 }
 
-struct nogvl_sock_args {
-    int rc;
-    trilogy_sock_t *sock;
-};
-
-static void *no_gvl_resolve(void *data)
+static int try_connect(struct trilogy_ctx *ctx, trilogy_handshake_t *handshake, const trilogy_sockopt_t *opts, int fd)
 {
-    struct nogvl_sock_args *args = data;
-    args->rc = trilogy_sock_resolve(args->sock);
-    return NULL;
-}
+    if (fd < 0) {
+        return TRILOGY_ERR;
+    }
 
-static int try_connect(struct trilogy_ctx *ctx, trilogy_handshake_t *handshake, const trilogy_sockopt_t *opts)
-{
     trilogy_sock_t *sock = trilogy_sock_new(opts);
     if (sock == NULL) {
         return TRILOGY_ERR;
     }
 
-    struct nogvl_sock_args args = {.rc = 0, .sock = sock};
-
-    // Do the DNS resolving with the GVL unlocked. At this point all
-    // configuration data is copied and available to the trilogy socket.
-    rb_thread_call_without_gvl(no_gvl_resolve, (void *)&args, RUBY_UBF_IO, NULL);
-
-    int rc = args.rc;
-
-    if (rc != TRILOGY_OK) {
-        trilogy_sock_close(sock);
-        return rc;
-    }
+    int rc;
 
     /* replace the default wait callback with our GVL-aware callback so we can
 escape the GVL on each wait operation without going through call_without_gvl */
     sock->wait_cb = _cb_ruby_wait;
-    rc = trilogy_connect_send_socket(&ctx->conn, sock);
+    //rc = trilogy_connect_send_socket(&ctx->conn, sock);
+    rc = trilogy_connect_set_fd(&ctx->conn, sock, fd);
     if (rc < 0) {
         trilogy_sock_close(sock);
         return rc;
@@ -602,7 +584,17 @@ static VALUE rb_trilogy_connect(VALUE self, VALUE encoding, VALUE charset, VALUE
         connopt.tls_max_version = NUM2INT(val);
     }
 
-    int rc = try_connect(ctx, &handshake, &connopt);
+    int fd = -1;
+    if ((val = rb_hash_lookup(opts, ID2SYM(id_raw_socket))) != Qnil) {
+        VALUE val = rb_hash_lookup(opts, ID2SYM(id_raw_socket));
+        VALUE io = rb_io_get_io(val);
+        //rb_io_check_readable(io);
+        //rb_io_check_writable(io);
+
+        fd = rb_io_descriptor(io);
+    }
+
+    int rc = try_connect(ctx, &handshake, &connopt, fd);
     if (rc != TRILOGY_OK) {
         if (connopt.path) {
             handle_trilogy_error(ctx, rc, "trilogy_connect - unable to connect to %s", connopt.path);
@@ -1219,6 +1211,7 @@ RUBY_FUNC_EXPORTED void Init_cext(void)
     Trilogy_AuthPluginError = rb_const_get(Trilogy, rb_intern("AuthPluginError"));
 
     id_socket = rb_intern("socket");
+    id_raw_socket = rb_intern("raw_socket");
     id_host = rb_intern("host");
     id_port = rb_intern("port");
     id_username = rb_intern("username");

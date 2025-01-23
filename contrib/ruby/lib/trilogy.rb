@@ -15,6 +15,32 @@ class Trilogy
     @connection_options = options
     @connected_host = nil
 
+    if (host = options[:host]) || (path = options[:socket])
+      begin
+        if host
+          port = options[:port] || 3306
+          @socket = TCPSocket.new(host, port, connect_timeout: 1)
+
+          # TODO: this probably needs to set keepalive and similar options
+        else
+          @socket = UNIXSocket.new(path)
+        end
+      rescue IO::TimeoutError => e
+        raise Trilogy::TimeoutError, e.message
+      rescue Socket::ResolutionError => e
+        connection_str = host ? "#{host}:#{port}" : path
+        raise Trilogy::BaseConnectionError, "unable to connect to \"#{connection_str}\": #{e.message}"
+      rescue => e
+        if e.respond_to?(:errno)
+          raise Trilogy::SyscallError.from_errno(e.errno, e.message)
+        else
+          raise
+        end
+      end
+      @socket.autoclose = false
+      options[:raw_socket] = @socket
+    end
+
     _connect(encoding, charset, options)
   end
 

@@ -9,7 +9,17 @@ require "mysql2"
 
 DEFAULT_USER = ENV["MYSQL_USER"] || "root"
 DEFAULT_PASS = ENV["MYSQL_PASS"]
-DEFAULT_SOCK = ENV["MYSQL_SOCK"] || "/tmp/mysql.sock"
+
+def find_socket
+  %w[
+    /tmp/mysql.sock
+    /var/run/mysqld/mysqld.sock
+  ].detect do |path|
+    File.exist?(path)
+  end
+end
+
+DEFAULT_SOCK = ENV["MYSQL_SOCK"] || find_socket
 
 connect_options = {
   path:     DEFAULT_SOCK, # for trilogy
@@ -17,6 +27,8 @@ connect_options = {
   username: DEFAULT_USER,
   password: DEFAULT_PASS
 }
+
+puts "Using config: #{connect_options.inspect}"
 
 Benchmark.ips do |x|
   x.report "trilogy connect/close" do
@@ -126,6 +138,8 @@ Benchmark.ips do |x|
 
   x.compare!
 end
+
+__END__
 
 # reset warning count
 trilogy_client.query("SELECT 1")
